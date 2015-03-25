@@ -9,26 +9,6 @@
     using System.Windows.Forms;
     using Tobii.EyeX.Client;
     using Tobii.EyeX.Framework;
-
-    /// <summary>
-    /// Event argument class for gaze position event
-    /// </summary>
-    class GazeEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gaze current position
-        /// </summary>
-        public Point Position;
-
-        /// <summary>
-        /// Creates a new event arguments
-        /// </summary>
-        /// <param name="position">Current position</param>
-        public GazeEventArgs(Point position)
-        {
-            Position = position;
-        }
-    }
     
     /// <summary>
     /// Input method using the EyeX controller to get gaze (eye focus point on screen) position.<br/>
@@ -41,6 +21,11 @@
         /// Engine used
         /// </summary>
         public EyeXHost Engine;
+
+        /// <summary>
+        /// Current gaze position
+        /// </summary>
+        public Point Position;
 
         /// <summary>
         /// Generate gaze position on screen at approximatively 60 frame per second
@@ -56,11 +41,6 @@
         /// Sampling duration, during which interpolation is computed
         /// </summary>
         protected int duration = 500;
-
-        /// <summary>
-        /// Current gaze position
-        /// </summary>
-        protected Point position;
 
         /// <summary>
         /// Last event timestamp, for cursor interpollation
@@ -81,18 +61,6 @@
         /// Current display's size
         /// </summary>
         protected Rect displaySize;
-
-        /// <summary>
-        /// Gaze event handler method
-        /// </summary>
-        /// <param name="sender">The Gaze instance that sent gaze position</param>
-        /// <param name="e">Event arguments, including position as a point</param>
-        public delegate void GazeEventHandler(object sender, GazeEventArgs e);
-
-        /// <summary>
-        /// Raised when another gaze position is ready
-        /// </summary>
-        public event GazeEventHandler Next;
         
         /// <summary>
         /// Detect EyeX engine presence, and starts it to get gaze positions
@@ -102,7 +70,7 @@
         public Gaze(int fps)
         {
             this.interpolated = duration*fps/1000;
-            this.position = Cursor.Position;
+            this.Position = Cursor.Position;
             positions = new Queue<Point>(interpolated);
 
             // simple check of EyeX presence
@@ -179,31 +147,30 @@
                 var end = new Point((int)evt.X, (int)evt.Y);
                 last = evt.Timestamp;
                 positions.Clear();
-                // TODO manage points that are not on screen
     
                 // compute straight formula for interpolation
-                var a = (double)(end.Y - position.Y) / (end.X - position.X);
-                var b = position.Y - a * position.X;
+                var a = (double)(end.Y - Position.Y) / (end.X - Position.X);
+                var b = Position.Y - a * Position.X;
                 if (a == double.PositiveInfinity || a == double.NegativeInfinity)
                 {
                     // vertical straight
-                    var step = (double)(end.Y - position.Y) / interpolated;
+                    var step = (double)(end.Y - Position.Y) / interpolated;
                     foreach (var i in Enumerable.Range(1, interpolated))
                     {
                         // interpolate enought points for the next interval
-                        double y = position.Y + step * i;
-                        var added = new Point(position.X, (int)y);
+                        double y = Position.Y + step * i;
+                        var added = new Point(Position.X, (int)y);
                         positions.Enqueue(cropToDisplay(added));
                     }
                 }
                 else
                 {
                     // classical straight
-                    var step = (double)(end.X - position.X) / interpolated;
+                    var step = (double)(end.X - Position.X) / interpolated;
                     foreach (var i in Enumerable.Range(1, interpolated))
                     {
                         // interpolate enought points for the next interval
-                        double x = position.X + step * i;
+                        double x = Position.X + step * i;
                         var added = new Point((int)x, (int)(a * x + b));
                         positions.Enqueue(cropToDisplay(added));
                     }
@@ -221,11 +188,8 @@
             if (positions.Count != 0)
             {
                 // send new position
-                position = positions.Dequeue();
-                if (Next != null)
-                {
-                    Next(this, new GazeEventArgs(position));
-                }
+                Position = positions.Dequeue();
+                new commands.MousePosition(Position).Execute();
             }
         }
     }

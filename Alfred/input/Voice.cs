@@ -2,25 +2,76 @@
 {
     using System;
     using System.Speech.Recognition;
+    using System.Threading;
 
     /// <summary>
-    /// Event argument class for gaze position event
+    /// Recognized patterns
     /// </summary>
-    class VoiceEventArgs : EventArgs
+    public sealed class Pattern
     {
         /// <summary>
-        /// Recognized pattern
+        /// Builds a pattern from a given spoken word
         /// </summary>
-        public Voice.Pattern Recognized;
+        /// <param name="value">Spoken word</param>
+        /// <param name="direct">False if word must be prefixed</param>
+        private Pattern(string value, bool direct = false)
+        {
+            Value = value;
+            IsDirect = direct;
+        }
 
         /// <summary>
-        /// Creates a new event arguments
+        /// Spoken word for this patter
         /// </summary>
-        /// <param name="position">Recognized text</param>
-        public VoiceEventArgs(Voice.Pattern recognized)
+        public string Value;
+
+        /// <summary>
+        /// True when word is spoken without prefix
+        /// </summary>
+        public bool IsDirect;
+
+        /// <summary>
+        /// Returns a string representation of this pattern
+        /// </summary>
+        /// <returns>The spoken word</returns>
+        public override string ToString()
         {
-            Recognized = recognized;
+            return Value;
         }
+
+        /// <summary>
+        /// Build a known pattern from a string value
+        /// </summary>
+        /// <param name="value">string to be converted to pattern</param>
+        /// <returns>The known pattern or null if value isn't recognized</returns>
+        public static Pattern ValueOf(string value)
+        {
+            foreach (Pattern known in Values)
+            {
+                if (known.Value.Equals(value))
+                {
+                    return known;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Prefix used before commands
+        /// </summary>
+        public static Pattern Prefix = new Pattern("al");
+
+        // Supported patterns
+        public static Pattern Quit = new Pattern("terminer");
+        public static Pattern LeftDoubleClick = new Pattern("tiptop", true);
+        public static Pattern LeftClick = new Pattern("top", true);
+        public static Pattern Calibrate = new Pattern("calibration");
+        public static Pattern Close = new Pattern("fermer");
+
+        /// <summary>
+        /// List of supported patterns
+        /// </summary>
+        public static Pattern[] Values = new Pattern[] { LeftClick, LeftDoubleClick, Close, Calibrate, Quit };
     }
 
     /// <summary>
@@ -39,75 +90,6 @@
     /// </summary>
     class Voice : IDisposable
     {
-        /// <summary>
-        /// Recognized patterns
-        /// </summary>
-        public sealed class Pattern
-        {
-            /// <summary>
-            /// Builds a pattern from a given spoken word
-            /// </summary>
-            /// <param name="value">Spoken word</param>
-            /// <param name="direct">False if word must be prefixed</param>
-            private Pattern(string value, bool direct = false) 
-            { 
-                Value = value;
-                IsDirect = direct;
-            }
-
-            /// <summary>
-            /// Spoken word for this patter
-            /// </summary>
-            public string Value;
-
-            /// <summary>
-            /// True when word is spoken without prefix
-            /// </summary>
-            public bool IsDirect;
-
-            /// <summary>
-            /// Returns a string representation of this pattern
-            /// </summary>
-            /// <returns>The spoken word</returns>
-            public override string ToString()
-            {
-                return Value;
-            }
-
-            /// <summary>
-            /// Build a known pattern from a string value
-            /// </summary>
-            /// <param name="value">string to be converted to pattern</param>
-            /// <returns>The known pattern or null if value isn't recognized</returns>
-            public static Pattern ValueOf(string value)
-            {
-                foreach (Pattern known in Values)
-                {
-                    if (known.Value.Equals(value))
-                    {
-                        return known;
-                    }
-                }
-                return null;
-            }
-
-            /// <summary>
-            /// Prefix used before commands
-            /// </summary>
-            public static Pattern Prefix            = new Pattern("al");
-
-            // Supported patterns
-            public static Pattern Quit              = new Pattern("terminer");
-            public static Pattern LeftDoubleClick   = new Pattern("tiptop", true);
-            public static Pattern LeftClick         = new Pattern("top", true);
-            public static Pattern Calibrate         = new Pattern("calibration");
-            public static Pattern Close             = new Pattern("fermer");
-
-            /// <summary>
-            /// List of supported patterns
-            /// </summary>
-            public static Pattern[] Values = new Pattern[] { LeftClick, LeftDoubleClick, Close, Calibrate, Quit };
-        }
 
         /// <summary>
         /// Speech recognition engine
@@ -115,22 +97,25 @@
         protected SpeechRecognitionEngine speech;
 
         /// <summary>
-        /// Voice event handler method
+        /// Completion handle used
         /// </summary>
-        /// <param name="sender">The Gaze instance that sent gaze position</param>
-        /// <param name="e">Event arguments, including position as a point</param>
-        public delegate void VoiceEventHandler(object sender, VoiceEventArgs e);
+        public EventWaitHandle Completion;
 
         /// <summary>
-        /// Raised when another text was recognized
+        /// Gaze input to get current mouse position
         /// </summary>
-        public event VoiceEventHandler Next;
+        public Gaze GazeInput;
 
         /// <summary>
         /// Loads grammar and init recognition engine
         /// </summary>
-        public Voice()
+        /// <param name="completion">Program completion handler</param>
+        /// <param name="gazeInput">Gaze input handler</param>
+        public Voice(EventWaitHandle completion, Gaze gazeInput)
         {
+            Completion = completion;
+            GazeInput = gazeInput;
+
             // creates speech engine 
             speech = new SpeechRecognitionEngine();
             // load commands grammar
@@ -169,14 +154,30 @@
         /// <param name="evt">Recognized speech details</param>
         protected void OnSpeech(object sender, SpeechRecognizedEventArgs evt)
         {
-            VoiceEventArgs triggered = null;
             if (evt.Result != null && evt.Result.Semantics != null)
             {
-                triggered = new VoiceEventArgs(Pattern.ValueOf(evt.Result.Semantics["command"].Value.ToString()));
-            }
-            if (Next != null && triggered != null)
-            {
-                Next(this, triggered);
+                var command = Pattern.ValueOf(evt.Result.Semantics["command"].Value.ToString());
+                if (Pattern.Calibrate.Equals(command))
+                {
+                    new commands.Calibrate(GazeInput.Engine).Execute();
+                }
+                else if (Pattern.LeftClick.Equals(command))
+                {
+                    new commands.MouseLeftClick(GazeInput.Position).Execute();
+                }
+                else if (Pattern.LeftDoubleClick.Equals(command))
+                {
+                    new commands.MouseLeftDoubleClick(GazeInput.Position).Execute();
+                }
+                else if (Pattern.Close.Equals(command))
+                {
+                    new commands.Close().Execute();
+                }
+                else if (Pattern.Quit.Equals(command))
+                {
+                    new commands.Quit(Completion).Execute();
+                }
+
             }
         }
 
