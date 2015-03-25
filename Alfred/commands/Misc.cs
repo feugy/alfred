@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Alfred.commands
+﻿namespace Alfred.commands
 {
+    using System;
     using System.Threading;
+    using System.Windows.Forms;
 
     /// <summary>
     /// Alfred terminaison command
@@ -33,6 +29,18 @@ namespace Alfred.commands
         public void Execute()
         {
             Completion.Set();
+        }
+    }
+
+    /// <summary>
+    /// Sends close shortcut (alt + F4) to active window
+    /// </summary>
+    class Close: ICommand
+    {
+        public void Execute()
+        {
+            Console.WriteLine("send close shortcut");
+            SendKeys.SendWait("%{F4}");
         }
     }
 }

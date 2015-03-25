@@ -1,14 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Alfred.input
+﻿namespace Alfred.input
 {
     using EyeXFramework;
+    using System;
+    using System.Collections.Generic;
     using System.Drawing;
+    using System.Linq;
     using System.Timers;
+    using System.Windows.Forms;
     using Tobii.EyeX.Client;
     using Tobii.EyeX.Framework;
 
@@ -80,6 +78,11 @@ namespace Alfred.input
         protected System.Timers.Timer timer;
 
         /// <summary>
+        /// Current display's size
+        /// </summary>
+        protected Rect displaySize;
+
+        /// <summary>
         /// Gaze event handler method
         /// </summary>
         /// <param name="sender">The Gaze instance that sent gaze position</param>
@@ -95,12 +98,11 @@ namespace Alfred.input
         /// Detect EyeX engine presence, and starts it to get gaze positions
         /// </summary>
         /// <param name="fps">Number of gaze positions expected per second</param>
-        /// <param name="position">Initial position for first interpolation</param>
         /// <exception cref="Exception">If EyeX engine is not installed or running</exception>
-        public Gaze(int fps, Point position)
+        public Gaze(int fps)
         {
             this.interpolated = duration*fps/1000;
-            this.position = position;
+            this.position = Cursor.Position;
             positions = new Queue<Point>(interpolated);
 
             // simple check of EyeX presence
@@ -113,11 +115,14 @@ namespace Alfred.input
             }
 
             Engine = new EyeXHost();
+            // track display size
+            Engine.ScreenBoundsChanged += (object s, EngineStateValue<Rect> e) => displaySize = e.Value;;             
             // track gaze position to set cursor on it
             gazeStream = Engine.CreateFixationDataStream(FixationDataMode.Sensitive);
             gazeStream.Next += OnGazeChange;
             // start the EyeX engine
             Engine.Start();
+            displaySize = Engine.ScreenBounds.Value;
 
             // start timer
             timer = new System.Timers.Timer(duration/interpolated);
@@ -135,6 +140,34 @@ namespace Alfred.input
         }
 
         /// <summary>
+        /// Ensure that intepolated point will never be far outside display area, allowing a fixed tolerance.
+        /// </summary>
+        /// <param name="point">Interpolated point</param>
+        /// <returns>Cropped interpolated point</returns>
+        protected Point cropToDisplay(Point point)
+        {
+            var result = new Point(point.X, point.Y);
+            var tolerance = 10;
+            if (result.X < 0)
+            {
+                result.X = -tolerance;
+            }
+            else if (result.X > displaySize.Width)
+            {
+                result.X = (int)displaySize.Width + tolerance;
+            }
+            if (result.Y < 0)
+            {
+                result.Y = -tolerance;
+            }
+            else if (result.Y > displaySize.Height)
+            {
+                result.Y = (int)displaySize.Height + tolerance;
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Invoked when EyeX engine detect a gaze change
         /// </summary>
         /// <param name="source">EyeX original stream publishing this event</param>
@@ -143,22 +176,37 @@ namespace Alfred.input
         {
             if (evt.Timestamp - last > duration)
             {
+                var end = new Point((int)evt.X, (int)evt.Y);
                 last = evt.Timestamp;
                 positions.Clear();
-
-                var end = new Point((int)evt.X, (int)evt.Y);
+                // TODO manage points that are not on screen
     
                 // compute straight formula for interpolation
                 var a = (double)(end.Y - position.Y) / (end.X - position.X);
                 var b = position.Y - a * position.X;
-                var step = (double)(end.X - position.X) / interpolated;
-
-                // intepolate enought points for the next interval
-                foreach (var i in Enumerable.Range(1, interpolated))
+                if (a == double.PositiveInfinity || a == double.NegativeInfinity)
                 {
-                    double x = position.X + step * i;
-                    var added = new Point((int)x, (int)(a * x + b));
-                    positions.Enqueue(added);
+                    // vertical straight
+                    var step = (double)(end.Y - position.Y) / interpolated;
+                    foreach (var i in Enumerable.Range(1, interpolated))
+                    {
+                        // interpolate enought points for the next interval
+                        double y = position.Y + step * i;
+                        var added = new Point(position.X, (int)y);
+                        positions.Enqueue(cropToDisplay(added));
+                    }
+                }
+                else
+                {
+                    // classical straight
+                    var step = (double)(end.X - position.X) / interpolated;
+                    foreach (var i in Enumerable.Range(1, interpolated))
+                    {
+                        // interpolate enought points for the next interval
+                        double x = position.X + step * i;
+                        var added = new Point((int)x, (int)(a * x + b));
+                        positions.Enqueue(cropToDisplay(added));
+                    }
                 }
             }
         }
