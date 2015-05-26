@@ -1,46 +1,68 @@
-﻿namespace Alfred.commands
-{
-    using System;
-    using System.Threading;
-    using System.Windows.Forms;
+﻿using Alfred.Core;
+using System;
+using System.Threading;
+using System.Windows.Forms;
 
+namespace Alfred.Commands
+{
     /// <summary>
     /// Alfred terminaison command
     /// </summary>
-    class Quit: ICommand
+    class Quit: Command
     {
-        /// <summary>
-        /// Completion handle used
-        /// </summary>
         public EventWaitHandle Completion;
 
-        /// <summary>
-        /// Set completion handle that will be terminated
-        /// </summary>
-        /// <param name="completion">Completion handle</param>
-        public Quit(EventWaitHandle completion) 
+        public Quit(EventWaitHandle completion)
         {
             Completion = completion;
         }
 
-        /// <summary>
-        /// Set the completion handle that will stop tha wait
-        /// </summary>
-        public void Execute()
+        override public bool Execute(Context context)
         {
-            Completion.Set();
+            if (context.Recognized == Pattern.Quit)
+            {
+                Completion.Set();
+                return true;
+            }
+            return false;
         }
     }
 
     /// <summary>
     /// Sends close shortcut (alt + F4) to active window
     /// </summary>
-    class Close: ICommand
+    class Close: Command
     {
-        public void Execute()
+        override public bool Execute(Context context)
         {
-            Console.WriteLine("send close shortcut");
-            SendKeys.SendWait("%{F4}");
+            if (context.Recognized == Pattern.Close)
+            {
+                bool runningCommandEnded = false;
+                foreach (Command running in context.RunningCommands)
+                {
+                    if (running.GetType() == typeof(Calibrate))
+                    {
+                        // calibration in progress: triggers enter
+                        runningCommandEnded = true;
+                        SendKeys.SendWait("~");
+                        break;
+                    } else if (running.GetType() == typeof(Dictate))
+                    {
+                        // dictation in progress: ends it
+                        runningCommandEnded = true;
+                        running.IsRunning = false;
+                        break;
+                    }
+                }
+                if (!runningCommandEnded)
+                {
+                    Console.WriteLine("send close shortcut");
+                    // trigger Alt + F4
+                    SendKeys.SendWait("%{F4}");
+                }
+                return true;
+            }
+            return false;
         }
     }
 }

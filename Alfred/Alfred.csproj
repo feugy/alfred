@@ -65,14 +65,19 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="commands\Command.cs" />
-    <Compile Include="commands\Misc.cs" />
-    <Compile Include="commands\Mouse.cs" />
-    <Compile Include="commands\Settings.cs" />
-    <Compile Include="input\Voice.cs" />
+    <Compile Include="Commands\Dictation.cs" />
+    <Compile Include="Core\Engine.cs" />
+    <Compile Include="Core\InputMethod.cs" />
+    <Compile Include="Core\Pattern.cs" />
+    <Compile Include="Core\Command.cs" />
+    <Compile Include="Commands\Magnification.cs" />
+    <Compile Include="Commands\Misc.cs" />
+    <Compile Include="Commands\Mouse.cs" />
+    <Compile Include="Commands\Settings.cs" />
+    <Compile Include="Input\Voice.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="input\Gaze.cs" />
+    <Compile Include="Input\Gaze.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Tobii.EyeX.Client.dll">

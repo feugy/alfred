@@ -1,21 +1,42 @@
-﻿namespace Alfred.input
+﻿using Alfred.Core;
+using EyeXFramework;
+using System;
+using System.Drawing;
+using System.Linq;
+using System.Collections.Generic;
+using System.Timers;
+using System.Windows.Forms;
+using Tobii.EyeX.Client;
+using Tobii.EyeX.Framework;
+
+namespace Alfred.Input
 {
-    using EyeXFramework;
-    using System;
-    using System.Collections.Generic;
-    using System.Drawing;
-    using System.Linq;
-    using System.Timers;
-    using System.Windows.Forms;
-    using Tobii.EyeX.Client;
-    using Tobii.EyeX.Framework;
-    
+    /// <summary>
+    /// Specific event arguments used when position changes
+    /// </summary>
+    public class GazeChangeEventArgs : EventArgs
+    {
+        /// <summary>
+        /// Current gaze position
+        /// </summary>
+        public Point Position;
+
+        /// <summary>
+        /// Builds argument from a given position
+        /// </summary>
+        /// <param name="position">Current gaze position</param>
+        public GazeChangeEventArgs(Point position)
+        {
+            Position = position;
+        }
+    }
+
     /// <summary>
     /// Input method using the EyeX controller to get gaze (eye focus point on screen) position.<br/>
     /// Because EyeX is giving a gaze position approximatively 60 times per seconds (every 16ms), we only pick a
     /// bunch of them (one every 30) and interpolate straight path between them.
     /// </summary>
-    class Gaze : IDisposable
+    class Gaze : InputMethod
     {
         /// <summary>
         /// Engine used
@@ -101,7 +122,7 @@
         /// <summary>
         /// Clean timer and EyeX engine
         /// </summary>
-        public void Dispose()
+        override public void Dispose()
         {
             timer.Dispose();
             Engine.Dispose();
@@ -187,9 +208,9 @@
         {
             if (positions.Count != 0)
             {
-                // send new position
+                // send new position to listeners
                 Position = positions.Dequeue();
-                new commands.MousePosition(Position).Execute();
+                TriggerChange(new GazeChangeEventArgs(Position));
             }
         }
     }
